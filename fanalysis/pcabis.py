@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
 from fanalysis.basebis import Base
+from IPython.display import display
 
 
 class PCA(Base):
@@ -662,6 +663,5 @@ class PCA(Base):
             sup_row_coord = self.show_row_sup().format(precision = 3)
         else : 
             sup_row_coord = ""
-
         display(eig,row_coord,sup_row_coord,col_coord,sup_col_coord)
 
