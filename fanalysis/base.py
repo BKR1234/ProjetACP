@@ -801,3 +801,4 @@ class Base(BaseEstimator, TransformerMixin):
         
         else:
             raise Exception("Error : self.stats attribute set at \'False\'")
+

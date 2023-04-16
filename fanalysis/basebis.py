@@ -329,31 +329,46 @@ class Base(BaseEstimator, TransformerMixin):
         -------
         None
         """
-        plt.figure(figsize=figsize)
+        # Voir position annotation
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_subplot()
         if type == "absolute":
             plt.bar(np.arange(1, self.eig_[0].shape[0] + 1), self.eig_[0],
                     color="steelblue", align="center")
             plt.xlabel("Axis")
             plt.ylabel("Eigenvalue")
             plt.axhline(y=1, color = "lightgrey", ls="--")
+
+            for i in np.arange(1, self.eig_[0].shape[0] + 1):
+                ax.annotate(str(round(self.eig_[0][i-1],2))+ '%', size=10,xy = ((np.arange(1, self.eig_[0].shape[0] + 1))[i-1]-(0.045*self.n_components_),self.eig_[0][i-1]+0.05))
+
         elif type == "percentage":
             plt.bar(np.arange(1, self.eig_[1].shape[0] + 1), self.eig_[1],
                     color="steelblue", align="center")
             plt.xlabel("Axis")
             plt.ylabel("Percentage of variance")
-            plt.scatter(np.arange(1, self.eig_[1].shape[0] + 1), self.eig_[1], color="black", linewidths=3)
+            plt.scatter(np.arange(1, self.eig_[1].shape[0] + 1), self.eig_[1], color="black", linewidths=5/self.n_components_)
             plt.plot(np.arange(1, self.eig_[1].shape[0] + 1), self.eig_[1], color="black")
+
+            for i in np.arange(1, self.eig_[1].shape[0] + 1):
+                ax.annotate(str(round(self.eig_[1][i-1],2))+ '%', size=10,xy = ((np.arange(1, self.eig_[1].shape[0] + 1))[i-1]+(0.01*self.n_components_),self.eig_[1][i-1]+0.7))
+
         elif type == "cumulative":
             plt.bar(np.arange(1, self.eig_[2].shape[0] + 1), self.eig_[2],
                     color="steelblue", align="center")
             plt.xlabel("Axis")
             plt.ylabel("Cumulative percentage of variance")
-            plt.scatter(np.arange(1, self.eig_[2].shape[0] + 1), self.eig_[2], color="black", linewidths=3)
+            plt.scatter(np.arange(1, self.eig_[2].shape[0] + 1), self.eig_[2], color="black", linewidths=5/self.n_components_)
             plt.plot(np.arange(1, self.eig_[2].shape[0] + 1), self.eig_[2], color="black")
+            
+            for i in np.arange(1, self.eig_[2].shape[0] + 1):
+                ax.annotate(str(round(self.eig_[2][i-1],2))+ '%', size=(12/self.n_components_)+7, color ="white", weight="bold",xy = ((np.arange(1, self.eig_[2].shape[0] + 1))[i-1]-(0.056*self.n_components_),self.eig_[2][i-1]-6))
+
         else:
             raise Exception("Error : 'type' variable must be 'absolute' or \
                             'percentage' or 'cumulative'")
         plt.title("Scree plot")
+        plt.xticks(range(1,self.n_components_+1))
         plt.show()
 
     def mapping(self, num_x_axis, num_y_axis, short_labels=True, figsize=None):
@@ -553,6 +568,7 @@ class Base(BaseEstimator, TransformerMixin):
         plt.title("Rows contributions")
         plt.xlabel("Contributions (%)")
         plt.ylabel("Rows")
+        plt.axvline(x = 100/n_rows, color = 'red', linestyle = '--', linewidth = 1)
         plt.show()
     
     def plot_col_contrib(self, num_axis, nb_values=None, short_labels=True,
@@ -613,9 +629,11 @@ class Base(BaseEstimator, TransformerMixin):
         plt.title("Columns contributions")
         plt.xlabel("Contributions (%)")
         plt.ylabel("Columns")
+        plt.axvline(x = 100/n_cols, color = 'red', linestyle = '--', linewidth = 1)
         plt.show()
 
     def plot_row_cos2(self, num_axis, nb_values=None, figsize=None):
+        #vline ?
         """ Plot the row cosines graph
             
         For the selected axis, the graph represents the row cosines
@@ -657,8 +675,8 @@ class Base(BaseEstimator, TransformerMixin):
         plt.ylabel("Rows")
         plt.show()
 
-    def plot_col_cos2(self, num_axis, nb_values=None, short_labels=True,
-                      figsize=None):
+    def plot_col_cos2(self, num_axis, nb_values=None, short_labels=True, figsize=None):
+        #vline ?
         """ Plot the column cosines graph
             
         For the selected axis, the graph represents the column cosines
@@ -807,9 +825,4 @@ class Base(BaseEstimator, TransformerMixin):
             raise Exception("Error : self.stats attribute set at \'False\'")
 
 
-
-def show_eig(self):
-    L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-    a=pd.DataFrame(self.eig_, index = ['Eigenvalue','Percentage of variance (%)','Cumulative percentage of variance (%)'], columns=L)
-    print(a)
 

@@ -136,7 +136,7 @@ class PCA(Base):
         self.col_labels = col_labels
         self.stats = stats
 
-    def fit(self, X, y=None, quanti_sup=None):
+    def fit(self, df, ind_sup = None, quanti_sup = None):
         """ Fit the model to X
 
         Parameters
@@ -162,9 +162,57 @@ class PCA(Base):
         self.col_cos2_ = None
 
         self.quanti_sup = quanti_sup
+        self.col_coord_sup_ = None
+
+        self.ind_sup = ind_sup
+        self.row_coord_sup_ = None
+
+        if self.ind_sup == None :
+            self.ind_sup_val = np.array(None)
+            self.row_label_sup = None
+            if self.quanti_sup == None :
+                self.X = df.values
+                self.col_labels = df.columns
+                self.row_labels = df.index
+                self.Y = np.array(None)
+                self.col_labels_sup = None
+            else :
+                iqs = [i-1 for i in self.quanti_sup]
+                ndf = df.drop(df.columns[iqs],axis=1)
+                self.X = ndf.values
+                self.col_labels = ndf.columns
+                self.row_labels = ndf.index
+                dfqs = df[df.columns[iqs]]
+                self.Y = dfqs.values
+                self.col_labels_sup = dfqs.columns
+        else :
+            if self.quanti_sup == None :
+                iis = [i-1 for i in ind_sup]
+                ndf = df.drop(df.index[iis], axis=0)
+                self.X = ndf.values
+                self.col_labels = ndf.columns
+                self.row_labels = ndf.index
+                self.Y = np.array(None)
+                self.col_labels_sup = None
+                self.ind_sup_val = ndf.values[iis]
+                self.row_label_sup = ndf.index[iis]
+
+
+            else :
+                iqs = [i-1 for i in self.quanti_sup]
+                iis = [i-1 for i in ind_sup]
+                ndf = df.drop(df.columns[iqs],axis=1).drop(df.index[iis], axis=0)
+                self.X = ndf.values
+                self.col_labels = ndf.columns
+                self.row_labels = ndf.index
+                dfqs = df[df.columns[iqs]].drop(df.index[iis], axis=0)
+                self.Y = dfqs.values
+                self.col_labels_sup = dfqs.columns
+                self.ind_sup_val = df.drop(df.columns[iqs],axis=1).values[iis]
+                self.row_label_sup = df.index[iis]
         
         # Compute SVD
-        self._compute_svd(X,quanti_sup)
+        self._compute_svd()
         
         return self
 
@@ -199,7 +247,7 @@ class PCA(Base):
         
         return Z.dot(self.eigen_vectors_)
         
-    def _compute_svd(self, X, quanti_sup):
+    def _compute_svd(self):
         """ Compute a Singular Value Decomposition
         
         Then, this function computes :
@@ -224,12 +272,12 @@ class PCA(Base):
         None
         """
         # Initializations
-        self.means_ = np.mean(X, axis=0).reshape(1, -1)
+        self.means_ = np.mean(self.X, axis=0).reshape(1, -1)
         if self.std_unit:
-            self.std_ = np.std(X, axis=0, ddof=0).reshape(1, -1)
-            Z = (X - self.means_) / self.std_
+            self.std_ = np.std(self.X, axis=0, ddof=0).reshape(1, -1)
+            Z = (self.X - self.means_) / self.std_
         else:
-            Z = X - self.means_        
+            Z = self.X - self.means_        
                 
         # SVD
         U, lambdas, V = np.linalg.svd(Z, full_matrices=False)
@@ -281,25 +329,58 @@ class PCA(Base):
         # Factor coordinates for columns - second step
         self.col_coord_ = col_coord[:, :self.n_components_]
 
+        # Individu sup
+        if self.ind_sup_val.all() != None :
+            if self.std_unit:
+                I = (self.ind_sup_val - self.means_) / self.std_
+            else :
+                I =  self.ind_sup_val - self.means_
+
+            row_coord_sup_ = np.zeros([len(self.ind_sup), self.n_components_])
+            for i in range(len(self.ind_sup)) :
+                for j in range(self.n_components_):
+                    row_coord_sup_[i,j] = sum(I[i,:] * self.eigen_vectors_[:,j])
+            self.row_coord_sup_ = row_coord_sup_[:, :self.n_components_]
+
+
+
+        # Variable sup
+        #Inititalisation
+        if self.Y.all() != None :   #mieux all ou any ?
+            self.means_qsup_ = np.mean(self.Y, axis=0).reshape(1, -1)
+            if self.std_unit:
+                self.std_qsup_ = np.std(self.Y, axis=0, ddof=0).reshape(1, -1)
+                W = (self.Y - self.means_qsup_) / self.std_qsup_  
+            else :
+                W =  self.Y - self.means_qsup_
+
+
+            col_coord_sup_ = W.T.dot(row_coord/(np.sqrt(eigen_values))/len(row_coord[:,0]))
+            self.col_coord_sup_ = col_coord_sup_[:, :self.n_components_]
+
+
         # Compute stats
         if self.stats:
-            self._compute_stats(X, Z)
+            if self.Y.all() != None :
+                self._compute_stats(Z,W)
+            else : 
+                self._compute_stats(Z)
         
         # Set row labels
-        nrows = X.shape[0]
+        nrows = self.X.shape[0]
         self.row_labels_ = self.row_labels
         if (self.row_labels_ is None) or (len(self.row_labels_) != nrows):
             self.row_labels_ = ["row" + str(x) for x in np.arange(0, nrows)]
         
         # Set column labels
-        ncols = X.shape[1]
+        ncols = self.X.shape[1]
         self.col_labels_ = self.col_labels
         if (self.col_labels_ is None) or (len(self.col_labels_) != ncols):
             self.col_labels_ = ["col" + str(x) for x in np.arange(0, ncols)]
         self.col_labels_short_ = self.col_labels_
         self.model_ = "pca"
 
-    def _compute_stats(self, X, Z):
+    def _compute_stats(self, Z, W = None):
         """ Compute statistics : 
                 row_contrib_ : row contributions.
                 col_contrib_ : column contributions.
@@ -346,8 +427,17 @@ class PCA(Base):
         self.col_cor_ = np.zeros(shape=(nvars, self.n_components_))
         for i in np.arange(0, nvars):
             for j in np.arange(0, self.n_components_):
-                self.col_cor_[i, j] = stat.pearsonr(X[:,i],
+                self.col_cor_[i, j] = stat.pearsonr(self.X[:,i],
                                                     self.row_coord_[:,j])[0]
+        
+        # Correlations between variables sup and axes
+        if self.Y.all() != None :
+            nvars = self.means_qsup_.shape[1]
+            self.col_cor_sup_ = np.zeros(shape=(nvars, self.n_components_))
+            for i in np.arange(0, nvars):
+                for j in np.arange(0, self.n_components_):
+                    self.col_cor_sup_[i, j] = stat.pearsonr(self.Y[:,i], self.row_coord_[:,j])[0]
+        
         
     def correlation_circle(self, num_x_axis, num_y_axis, figsize=None):
         """ Plot the correlation circle
@@ -383,11 +473,32 @@ class PCA(Base):
             delta = 0.1 if y >= 0 else -0.1
             ax.annotate("", xy=(x, y), xytext=(0, 0),
                         arrowprops={"facecolor": "black",
-                                    "width": 1,
+                                    "width": 0.5,
                                     "headwidth": 4})
             ax.text(x, y + delta, label,
                     horizontalalignment="center", verticalalignment="center",
                     color="blue")
+            
+        if self.Y.all() != None :
+            x_sup_serie = self.col_cor_sup_[:, num_x_axis - 1]
+            y_sup_serie = self.col_cor_sup_[:, num_y_axis - 1]
+            labels_sup = self.col_labels_sup
+            
+
+
+            for i in np.arange(0, x_sup_serie.shape[0]):
+                x = x_sup_serie[i]
+                y = y_sup_serie[i]
+                label_sup = labels_sup[i]
+                delta = 0.1 if y >= 0 else -0.1
+                ax.annotate("", xy=(x, y), xytext=(0, 0),
+                            arrowprops={"color": "red",
+                                        "width": 0.5,
+                                        "headwidth": 4})
+                ax.text(x, y - delta, label_sup,
+                        horizontalalignment="center", verticalalignment="center", 
+                        color="red")
+            
         
         plt.axvline(x=0, linestyle="--", linewidth=0.5, color="k")
         plt.axhline(y=0, linestyle="--", linewidth=0.5, color="k")
@@ -401,8 +512,156 @@ class PCA(Base):
         plt.show()
 
 
-def show_eig(self):
-    L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-    a=pd.DataFrame(self.eig_, index = ['Eigenvalue','Percentage of variance (%)','Cumulative percentage of variance (%)'], columns=L)
-    print(a)
+
+    def mapping_row(self, num_x_axis, num_y_axis, figsize=None):
+        """ Plot the Factor map for rows only
+        
+        Parameters
+        ----------
+        num_x_axis : int
+            Select the component to plot as x axis.
+        
+        num_y_axis : int
+             Select the component to plot as y axis.
+        
+        figsize : tuple of integers or None
+            Width, height of the figure in inches.
+            If not provided, defaults to rc figure.figsize
+
+        Returns
+        -------
+        None
+        """
+        plt.figure(figsize=figsize)
+        plt.scatter(self.row_coord_[:, num_x_axis - 1],
+                    self.row_coord_[:, num_y_axis - 1],
+                    marker=".", color="white")
+        for i in np.arange(0, self.row_coord_.shape[0]):
+            plt.text(self.row_coord_[i, num_x_axis - 1],
+                     self.row_coord_[i, num_y_axis - 1],
+                     self.row_labels_[i],
+                     horizontalalignment="center", verticalalignment="center",
+                     color="blue")
+
+        if self.ind_sup_val.all() != None :
+            for i in np.arange(0, self.row_coord_sup_.shape[0]):
+                plt.text(self.row_coord_sup_[i, num_x_axis - 1],
+                        self.row_coord_sup_[i, num_y_axis - 1],
+                        self.row_label_sup[i],
+                        horizontalalignment="center", verticalalignment="center",
+                        color="red")
+        
+        plt.title("Factor map for rows")
+        plt.xlabel("Dim " + str(num_x_axis) + " ("
+                    + str(np.around(self.eig_[1, num_x_axis - 1], 2)) + "%)")
+        plt.ylabel("Dim " + str(num_y_axis) + " ("
+                    + str(np.around(self.eig_[1, num_y_axis - 1], 2)) + "%)")
+        plt.axvline(x=0, linestyle="--", linewidth=0.5, color="k")
+        plt.axhline(y=0, linestyle="--", linewidth=0.5, color="k")
+        plt.show()
+
+
+
+
+    def show_eig(self):
+        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+        df=pd.DataFrame(self.eig_, index = ['Eigenvalue','Percentage of variance (%)','Cumulative percentage of variance (%)'], columns=L)
+        df = df.style.set_caption("Eigen values").set_table_styles([{
+            'selector': 'caption',
+            'props': [
+                ('font-size', '20px'),
+                ('font-weight', 'bold'),
+                ('text-align', 'center')
+            ]
+        }])
+        return(df)
+
+
+    def show_eigen_vectors(self):
+        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+        df=pd.DataFrame(self.eigen_vectors_, columns=L, index=self.col_labels)
+        df = df.style.set_caption("Eigen vectors").set_table_styles([{
+            'selector': 'caption',
+            'props': [
+                ('font-size', '20px'),
+                ('font-weight', 'bold'),
+                ('text-align', 'center')
+            ]
+        }])
+        return(df)
+
+    def show_row(self, stat):
+        #if coord/contrib/cos2 ... else rowtopandas
+        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+        df=pd.DataFrame(stat, columns = L, index = self.row_labels)
+        df = df.style.set_caption("Individuals").set_table_styles([{
+            'selector': 'caption',
+            'props': [
+                ('font-size', '20px'),
+                ('font-weight', 'bold'),
+                ('text-align', 'center')
+            ]
+        }])
+        return(df)
+
+    def show_row_sup(self):
+        #if coord/contrib/cos2 ... else rowtopandas
+        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+        df=pd.DataFrame(self.row_coord_sup_, columns = L, index = self.row_label_sup)
+        df = df.style.set_caption("Supplementary individual").set_table_styles([{
+            'selector': 'caption',
+            'props': [
+                ('font-size', '20px'),
+                ('font-weight', 'bold'),
+                ('text-align', 'center')
+            ]
+        }])
+        return(df)    
+
+    def show_col(self, stat):
+        #if coord/contrib/cos2 ... else coltopandas
+        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+        df=pd.DataFrame(stat, columns = L, index = self.col_labels)
+        df = df.style.set_caption("Variables").set_table_styles([{
+            'selector': 'caption',
+            'props': [
+                ('font-size', '20px'),
+                ('font-weight', 'bold'),
+                ('text-align', 'center')
+            ]
+        }])
+        return(df)
+    
+
+    def show_col_sup(self):
+        #if coord/contrib/cos2 ... else coltopandas
+        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+        df=pd.DataFrame(self.col_coord_sup_, columns = L, index = self.col_labels_sup)
+        df = df.style.set_caption("Supplementary continuous variable").set_table_styles([{
+            'selector': 'caption',
+            'props': [
+                ('font-size', '20px'),
+                ('font-weight', 'bold'),
+                ('text-align', 'center')
+            ]
+        }])
+        return(df)
+
+
+
+    def summary(self):
+        #eigenvalues // row_coord // sup_row_coord // col_coord // sup_col_coord 
+        eig = self.show_eig().format(precision = 3)
+        row_coord = self.show_row(self.row_coord_).format(precision = 3)
+        col_coord = self.show_col(self.col_coord_).format(precision = 3)
+        if self.quanti_sup != None :
+            sup_col_coord = self.show_col_sup().format(precision = 3)
+        else :
+            sup_col_coord = ""
+        if self.ind_sup != None :
+            sup_row_coord = self.show_row_sup().format(precision = 3)
+        else : 
+            sup_row_coord = ""
+
+        display(eig,row_coord,sup_row_coord,col_coord,sup_col_coord)
 
