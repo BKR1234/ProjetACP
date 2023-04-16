@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-from fanalysis.base import Base
+from fanalysis.basebis import Base
 
 
 class PCA(Base):
@@ -399,3 +399,10 @@ class PCA(Base):
         plt.ylabel("Dim " + str(num_y_axis) + " ("
                     + str(np.around(self.eig_[1, num_y_axis - 1], 2)) + "%)")
         plt.show()
+
+
+def show_eig(self):
+    L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+    a=pd.DataFrame(self.eig_, index = ['Eigenvalue','Percentage of variance (%)','Cumulative percentage of variance (%)'], columns=L)
+    print(a)
+

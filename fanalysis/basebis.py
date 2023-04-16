@@ -335,17 +335,21 @@ class Base(BaseEstimator, TransformerMixin):
                     color="steelblue", align="center")
             plt.xlabel("Axis")
             plt.ylabel("Eigenvalue")
-            ##plt.axhline(y=2)
+            plt.axhline(y=1, color = "lightgrey", ls="--")
         elif type == "percentage":
             plt.bar(np.arange(1, self.eig_[1].shape[0] + 1), self.eig_[1],
                     color="steelblue", align="center")
             plt.xlabel("Axis")
             plt.ylabel("Percentage of variance")
+            plt.scatter(np.arange(1, self.eig_[1].shape[0] + 1), self.eig_[1], color="black", linewidths=3)
+            plt.plot(np.arange(1, self.eig_[1].shape[0] + 1), self.eig_[1], color="black")
         elif type == "cumulative":
             plt.bar(np.arange(1, self.eig_[2].shape[0] + 1), self.eig_[2],
                     color="steelblue", align="center")
             plt.xlabel("Axis")
             plt.ylabel("Cumulative percentage of variance")
+            plt.scatter(np.arange(1, self.eig_[2].shape[0] + 1), self.eig_[2], color="black", linewidths=3)
+            plt.plot(np.arange(1, self.eig_[2].shape[0] + 1), self.eig_[2], color="black")
         else:
             raise Exception("Error : 'type' variable must be 'absolute' or \
                             'percentage' or 'cumulative'")
@@ -801,3 +805,11 @@ class Base(BaseEstimator, TransformerMixin):
         
         else:
             raise Exception("Error : self.stats attribute set at \'False\'")
+
+
+
+def show_eig(self):
+    L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+    a=pd.DataFrame(self.eig_, index = ['Eigenvalue','Percentage of variance (%)','Cumulative percentage of variance (%)'], columns=L)
+    print(a)
+
