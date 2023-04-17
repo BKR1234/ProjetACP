@@ -340,7 +340,7 @@ class Base(BaseEstimator, TransformerMixin):
             plt.axhline(y=1, color = "lightgrey", ls="--")
 
             for i in np.arange(1, self.eig_[0].shape[0] + 1):
-                ax.annotate(str(round(self.eig_[0][i-1],2))+ '%', size=10,xy = ((np.arange(1, self.eig_[0].shape[0] + 1))[i-1]-(0.045*self.n_components_),self.eig_[0][i-1]+0.05))
+                ax.annotate(str(round(self.eig_[0][i-1],2)), size=10,xy = ((np.arange(1, self.eig_[0].shape[0] + 1))[i-1]-(0.035*self.n_components_),self.eig_[0][i-1]+0.05))
 
         elif type == "percentage":
             plt.bar(np.arange(1, self.eig_[1].shape[0] + 1), self.eig_[1],
