@@ -11,6 +11,7 @@ import scipy.stats as stat
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import seaborn as sns
 
 from fanalysis.basebis import Base
 from IPython.display import display
@@ -137,7 +138,7 @@ class PCA(Base):
         self.col_labels = col_labels
         self.stats = stats
 
-    def fit(self, df, ind_sup = None, quanti_sup = None):
+    def fit(self, df, ind_sup = None, quanti_sup = None, quali_sup = None):
         """ Fit the model to X
 
         Parameters
@@ -168,50 +169,89 @@ class PCA(Base):
         self.ind_sup = ind_sup
         self.row_coord_sup_ = None
 
+        self.quali_sup = quali_sup
+        self.quali_coord_sup_ = None
+
+        self.df = df
+
+        if type(self.quali_sup)==int :
+            self.quali_sup = [self.quali_sup]
+
+        if self.quali_sup != None :
+            iqls = [i-1 for i in self.quali_sup]
+            if self.ind_sup == None :
+                if self.quanti_sup == None :
+                    dt = df.drop(df.columns[iqls],axis=1)
+                else:
+                    iqs = [i-1 for i in self.quanti_sup]
+                    dt = df.drop(df.columns[iqls],axis=1).drop(df.columns[iqs],axis=1)
+            else :
+                iis = [i-1 for i in self.ind_sup]
+                if self.quanti_sup == None :
+                    dt = df.drop(df.columns[iqls],axis=1).drop(df.index[iis], axis=0)
+                else:
+                    iqs = [i-1 for i in self.quanti_sup]
+                    dt = df.drop(df.columns[iqls],axis=1).drop(df.columns[iqs],axis=1).drop(df.index[iis], axis=0)
+                    
+            
+            mean_qual = []
+            for j in iqls : 
+                for i in np.unique(df[df.columns[j]]) :    
+                    mean_qual.append(np.mean(dt[df[df.columns[j]]==i],axis=0))
+            
+            self.quali_sup_val = pd.DataFrame(mean_qual).values
+            self.quali_sup_labels = np.unique(df[df.columns[iqls]])
+
+        ndt = df.drop(df.columns[iqls],axis=1)
+
+        if type(self.quanti_sup)==int:
+            self.quanti_sup = [self.quanti_sup]
+
+        if type(self.ind_sup) == int :
+            self.ind_sup = [self.ind_sup]
+
         if self.ind_sup == None :
             self.ind_sup_val = np.array(None)
-            self.row_label_sup = None
+            self.row_labels_sup = None
             if self.quanti_sup == None :
-                self.X = df.values
-                self.col_labels = df.columns
-                self.row_labels = df.index
+                self.X = ndt.values
+                self.col_labels = ndt.columns
+                self.row_labels = ndt.index
                 self.Y = np.array(None)
                 self.col_labels_sup = None
             else :
-                iqs = [i-1 for i in self.quanti_sup]
-                ndf = df.drop(df.columns[iqs],axis=1)
+                
+                ndf = ndt.drop(df.columns[iqs],axis=1)
                 self.X = ndf.values
                 self.col_labels = ndf.columns
                 self.row_labels = ndf.index
-                dfqs = df[df.columns[iqs]]
+                dfqs = ndt[df.columns[iqs]]
                 self.Y = dfqs.values
                 self.col_labels_sup = dfqs.columns
         else :
             if self.quanti_sup == None :
-                iis = [i-1 for i in ind_sup]
-                ndf = df.drop(df.index[iis], axis=0)
+                ndf = ndt.drop(df.index[iis], axis=0)
                 self.X = ndf.values
                 self.col_labels = ndf.columns
                 self.row_labels = ndf.index
                 self.Y = np.array(None)
                 self.col_labels_sup = None
                 self.ind_sup_val = ndf.values[iis]
-                self.row_label_sup = ndf.index[iis]
+                self.row_labels_sup = ndf.index[iis]
 
 
             else :
-                iqs = [i-1 for i in self.quanti_sup]
-                iis = [i-1 for i in ind_sup]
-                ndf = df.drop(df.columns[iqs],axis=1).drop(df.index[iis], axis=0)
+                ndf = ndt.drop(df.columns[iqs],axis=1).drop(df.index[iis], axis=0)
                 self.X = ndf.values
                 self.col_labels = ndf.columns
                 self.row_labels = ndf.index
-                dfqs = df[df.columns[iqs]].drop(df.index[iis], axis=0)
+                dfqs = ndt[df.columns[iqs]].drop(df.index[iis], axis=0)
                 self.Y = dfqs.values
                 self.col_labels_sup = dfqs.columns
-                self.ind_sup_val = df.drop(df.columns[iqs],axis=1).values[iis]
-                self.row_label_sup = df.index[iis]
+                self.ind_sup_val = ndt.drop(df.columns[iqs],axis=1).values[iis]
+                self.row_labels_sup = ndt.index[iis]
         
+
         # Compute SVD
         self._compute_svd()
         
@@ -314,6 +354,10 @@ class PCA(Base):
                              eigen_values_percent[:self.n_components_],
                              eigen_values_percent_cumsum[:self.n_components_]])
         
+        self.eig = np.array([eigen_values,
+                             eigen_values_percent,
+                             eigen_values_percent_cumsum])
+        
         # Eigen vectors
         self.eigen_vectors_ = V.T[:, :self.n_components_]
         
@@ -360,28 +404,57 @@ class PCA(Base):
             self.col_coord_sup_ = col_coord_sup_[:, :self.n_components_]
 
 
+        #Quali sup
+        if self.quali_sup_val.all() != None :
+            if self.std_unit:
+                I = (self.quali_sup_val - self.means_) / self.std_
+            else :
+                I =  self.quali_sup_val - self.means_
+
+        quali_coord_sup_ = np.zeros([self.quali_sup_val.shape[0], self.n_components_])
+        for i in range(self.quali_sup_val.shape[0]) :
+            for j in range(self.n_components_):
+                quali_coord_sup_[i,j] = sum(I[i,:] * self.eigen_vectors_[:,j])
+
+        self.quali_coord_sup_ = quali_coord_sup_[:, :self.n_components_]
+
         # Compute stats
         if self.stats:
-            if self.Y.all() != None :
-                self._compute_stats(Z,W)
-            else : 
-                self._compute_stats(Z)
+            self._compute_stats(Z)
         
         # Set row labels
         nrows = self.X.shape[0]
         self.row_labels_ = self.row_labels
+        self.row_labels_.name = None
         if (self.row_labels_ is None) or (len(self.row_labels_) != nrows):
-            self.row_labels_ = ["row" + str(x) for x in np.arange(0, nrows)]
-        
+            self.row_labels_ = ["row " + str(x) for x in np.arange(0, nrows)]
+
+        if self.ind_sup_val.all() != None :
+            nrows_sup = len(self.ind_sup)
+            self.row_labels_sup_ = self.row_labels_sup
+            self.row_labels_sup_.name = None
+            if (self.row_labels_sup_ is None) or (len(self.row_labels_sup_) != nrows_sup):
+                self.row_labels_sup_ = ["row " + str(x) for x in np.arange(0, nrows_sup)]
+
+
         # Set column labels
         ncols = self.X.shape[1]
         self.col_labels_ = self.col_labels
+        self.col_labels_.name = None
         if (self.col_labels_ is None) or (len(self.col_labels_) != ncols):
-            self.col_labels_ = ["col" + str(x) for x in np.arange(0, ncols)]
+            self.col_labels_ = ["col " + str(x) for x in np.arange(0, ncols)]
         self.col_labels_short_ = self.col_labels_
+
+        if self.Y.all() != None :
+            ncols_sup = len(self.quanti_sup)
+            self.col_labels_sup_ = self.col_labels_sup
+            self.col_labels_sup_.name = None
+            if (self.col_labels_sup_ is None) or (len(self.col_labels_sup_) != ncols_sup):
+                self.col_labels_sup_ = ["col " + str(x) for x in np.arange(0, ncols_sup)]
+
         self.model_ = "pca"
 
-    def _compute_stats(self, Z, W = None):
+    def _compute_stats(self, Z):
         """ Compute statistics : 
                 row_contrib_ : row contributions.
                 col_contrib_ : column contributions.
@@ -438,6 +511,8 @@ class PCA(Base):
             for i in np.arange(0, nvars):
                 for j in np.arange(0, self.n_components_):
                     self.col_cor_sup_[i, j] = stat.pearsonr(self.Y[:,i], self.row_coord_[:,j])[0]
+
+            #self.col_cos2_sup_ = (self.col_coord_sup_ ** 2) / self.ss_col_coord_
         
         
     def correlation_circle(self, num_x_axis, num_y_axis, figsize=None):
@@ -514,7 +589,7 @@ class PCA(Base):
 
 
 
-    def mapping_row(self, num_x_axis, num_y_axis, figsize=None):
+    def mapping_row(self, num_x_axis, num_y_axis, figsize=None, type = None):
         """ Plot the Factor map for rows only
         
         Parameters
@@ -534,24 +609,73 @@ class PCA(Base):
         None
         """
         plt.figure(figsize=figsize)
-        plt.scatter(self.row_coord_[:, num_x_axis - 1],
+
+        x=self.row_coord_[:, num_x_axis - 1]
+        y=self.row_coord_[:, num_y_axis - 1]
+        
+
+        if type == "cos2" :
+            h= 0.1
+            color = "black"
+            cos2=self.row_cos2_[:, num_x_axis - 1]
+            df=pd.DataFrame({'x':x,'y':y,'cos2':cos2})
+            sns.relplot(x='x',y='y',hue='cos2',data=df, palette= "rocket_r") 
+
+        elif type == "contrib" :
+            h= 0.1
+            color = "black"
+            contrib = self.row_contrib_[:, num_x_axis - 1]
+            df=pd.DataFrame({'x':x,'y':y,'contrib':contrib})
+            sns.relplot(x='x',y='y',hue='contrib',data=df, palette= "rocket_r") 
+
+
+        elif type == "sup" :
+            h= 0.1
+            color = "black"
+            iqls = [i-1 for i in self.quali_sup]
+            iis = [i-1 for i in self.ind_sup]
+            sup = self.df[self.df.columns[iqls]].drop(self.df.index[iis], axis=0)
+            edf=pd.DataFrame({'x':x,'y':y})
+            sup.index = range(edf.shape[0])
+            edf = edf.join(sup)
+            edf.columns = ["x","y","sup"]
+            sns.relplot(x='x',y='y',hue='sup',data=edf) 
+
+
+
+        else :
+            h = 0
+            color = "black"
+            plt.scatter(self.row_coord_[:, num_x_axis - 1],
                     self.row_coord_[:, num_y_axis - 1],
                     marker=".", color="white")
+
+
+        
         for i in np.arange(0, self.row_coord_.shape[0]):
             plt.text(self.row_coord_[i, num_x_axis - 1],
-                     self.row_coord_[i, num_y_axis - 1],
+                     self.row_coord_[i, num_y_axis - 1] + h,
                      self.row_labels_[i],
                      horizontalalignment="center", verticalalignment="center",
-                     color="blue")
+                     color=color)
 
         if self.ind_sup_val.all() != None :
             for i in np.arange(0, self.row_coord_sup_.shape[0]):
                 plt.text(self.row_coord_sup_[i, num_x_axis - 1],
                         self.row_coord_sup_[i, num_y_axis - 1],
-                        self.row_label_sup[i],
+                        self.row_labels_sup_[i],
                         horizontalalignment="center", verticalalignment="center",
                         color="red")
         
+        if self.quali_sup_val.all() != None :
+            for i in np.arange(0, self.quali_coord_sup_.shape[0]):
+                plt.text(self.quali_coord_sup_[i, num_x_axis - 1],
+                        self.quali_coord_sup_[i, num_y_axis - 1],
+                        self.quali_sup_labels[i],
+                        horizontalalignment="center", verticalalignment="center",
+                        color="blue")
+        
+
         plt.title("Factor map for rows")
         plt.xlabel("Dim " + str(num_x_axis) + " ("
                     + str(np.around(self.eig_[1, num_x_axis - 1], 2)) + "%)")
@@ -565,8 +689,8 @@ class PCA(Base):
 
 
     def show_eig(self):
-        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(self.eig_, index = ['Eigenvalue','Percentage of variance (%)','Cumulative percentage of variance (%)'], columns=L)
+        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig[0]))]
+        df=pd.DataFrame(self.eig, index = ['Eigenvalue','Percentage of variance (%)','Cumulative percentage of variance (%)'], columns=L)
         df = df.style.set_caption("Eigen values").set_table_styles([{
             'selector': 'caption',
             'props': [
@@ -580,7 +704,7 @@ class PCA(Base):
 
     def show_eigen_vectors(self):
         L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(self.eigen_vectors_, columns=L, index=self.col_labels)
+        df=pd.DataFrame(self.eigen_vectors_, columns=L, index=self.col_labels_)
         df = df.style.set_caption("Eigen vectors").set_table_styles([{
             'selector': 'caption',
             'props': [
@@ -591,10 +715,30 @@ class PCA(Base):
         }])
         return(df)
 
-    def show_row(self, stat):
-        #if coord/contrib/cos2 ... else rowtopandas
-        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(stat, columns = L, index = self.row_labels)
+    def show_row(self):
+        if self.stats :
+            df = pd.DataFrame()
+            row_name = []
+
+            for i in range(self.row_coord_.shape[1]):
+                comp = 'Comp ' + str(i+1)
+                coord = 'Comp ' + str(i+1) + " (coord)"
+                contrib = 'Comp ' + str(i+1) + " (contrib)"
+                cos = 'Comp ' + str(i+1) + " (cos2)"
+                #df[comp] = " | " 
+                df[coord] = np.round(self.row_coord_[:,i],3)
+                df[contrib] = np.round(self.row_contrib_[:,i],3)
+                df[cos] = np.round(self.row_cos2_[:,i],3)
+                #df[comp] = np.round(self.row_coord_[:,i],3)
+                row_name = row_name + ["Comp" + str(i+1) + " coord","contrib","cos2"]
+
+            df.index = self.row_labels_
+            df.columns = row_name
+
+        else :
+            L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+            df=pd.DataFrame(self.row_coord_, columns = L, index = self.row_labels_)
+
         df = df.style.set_caption("Individuals").set_table_styles([{
             'selector': 'caption',
             'props': [
@@ -606,9 +750,8 @@ class PCA(Base):
         return(df)
 
     def show_row_sup(self):
-        #if coord/contrib/cos2 ... else rowtopandas
         L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(self.row_coord_sup_, columns = L, index = self.row_label_sup)
+        df=pd.DataFrame(self.row_coord_sup_, columns = L, index = self.row_labels_sup_)
         df = df.style.set_caption("Supplementary individual").set_table_styles([{
             'selector': 'caption',
             'props': [
@@ -619,11 +762,31 @@ class PCA(Base):
         }])
         return(df)    
 
-    def show_col(self, stat):
-        #if coord/contrib/cos2 ... else coltopandas
-        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(stat, columns = L, index = self.col_labels)
-        df = df.style.set_caption("Variables").set_table_styles([{
+    def show_col(self):
+        if self.stats :
+            df = pd.DataFrame()
+            col_name = []
+
+            for i in range(self.col_coord_.shape[1]):
+                comp = 'Comp ' + str(i+1)
+                coord = 'Comp ' + str(i+1) + " (coord)"
+                contrib = 'Comp ' + str(i+1) + " (contrib)"
+                cos = 'Comp ' + str(i+1) + " (cos2)"
+                #df[comp] = " | " 
+                df[coord] = np.round(self.col_coord_[:,i],3)
+                df[contrib] = np.round(self.col_contrib_[:,i],3)
+                df[cos] = np.round(self.col_cos2_[:,i],3)
+                #df[comp] = np.round(self.col_coord_[:,i],3)
+                col_name = col_name + ["Comp" + str(i+1) + " coord","contrib","cos2"]
+
+            df.index = self.col_labels_
+            df.columns = col_name
+
+        else :
+            L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+            df=pd.DataFrame(self.row_coord_, columns = L, index = self.row_labels_)
+
+        df = df.style.set_caption("Individuals").set_table_styles([{
             'selector': 'caption',
             'props': [
                 ('font-size', '20px'),
@@ -635,10 +798,23 @@ class PCA(Base):
     
 
     def show_col_sup(self):
-        #if coord/contrib/cos2 ... else coltopandas
         L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(self.col_coord_sup_, columns = L, index = self.col_labels_sup)
+        df=pd.DataFrame(self.col_coord_sup_, columns = L, index = self.col_labels_sup_)
         df = df.style.set_caption("Supplementary continuous variable").set_table_styles([{
+            'selector': 'caption',
+            'props': [
+                ('font-size', '20px'),
+                ('font-weight', 'bold'),
+                ('text-align', 'center')
+            ]
+        }])
+        return(df)
+    
+
+    def show_qual_sup(self):
+        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+        df=pd.DataFrame(self.quali_coord_sup_, columns = L, index = self.quali_sup_labels)
+        df = df.style.set_caption("Supplementary categories").set_table_styles([{
             'selector': 'caption',
             'props': [
                 ('font-size', '20px'),
@@ -651,17 +827,20 @@ class PCA(Base):
 
 
     def summary(self):
-        #eigenvalues // row_coord // sup_row_coord // col_coord // sup_col_coord 
         eig = self.show_eig().format(precision = 3)
-        row_coord = self.show_row(self.row_coord_).format(precision = 3)
-        col_coord = self.show_col(self.col_coord_).format(precision = 3)
+        row = self.show_row().format(precision = 3)
+        col = self.show_col().format(precision = 3)
         if self.quanti_sup != None :
-            sup_col_coord = self.show_col_sup().format(precision = 3)
+            sup_col = self.show_col_sup().format(precision = 3)
         else :
-            sup_col_coord = ""
+            sup_col = ""
         if self.ind_sup != None :
-            sup_row_coord = self.show_row_sup().format(precision = 3)
+            sup_row = self.show_row_sup().format(precision = 3)
         else : 
-            sup_row_coord = ""
-        display(eig,row_coord,sup_row_coord,col_coord,sup_col_coord)
+            sup_row = ""
+        if self.quali_sup != None :
+            sup_qual = self.show_qual_sup().format(precision = 3)
+        else :
+            sup_qual = ""
+        display(eig,row,sup_row,col,sup_col,sup_qual)
 
