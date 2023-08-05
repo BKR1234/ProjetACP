@@ -251,6 +251,9 @@ class PCA(Base):
                 self.ind_sup_val = ndt.drop(df.columns[iqs],axis=1).values[iis]
                 self.row_labels_sup = ndt.index[iis]
         
+        self.iis = iis
+        self.iqs = iqs
+        self.iqls = iqls
 
         # Compute SVD
         self._compute_svd()
@@ -495,6 +498,35 @@ class PCA(Base):
         col_cos2 = (self.col_coord_ ** 2) / self.ss_col_coord_
         self.col_cos2_ = col_cos2[:, :self.n_components_]
         self.ss_col_coord_ = None
+
+        #Cos2 ind sup
+        t = self.df.iloc[self.iis].drop(self.df.columns[self.iqls],axis=1).drop(self.df.columns[self.iqs],axis=1)
+        if self.std_unit:
+            W = (t - self.means_) / self.std_
+        else :
+            W = (t - self.means_)
+        
+        ind_sup_cos2 = ((self.row_coord_sup_ ** 2) / (np.linalg.norm(W, axis=1).reshape(-1, 1) ** 2))
+        self.ind_sup_cos2 = ind_sup_cos2[:, :self.n_components_]
+
+        #Cos2 var quali sup
+        if self.std_unit:
+            W = (self.quali_sup_val - self.means_) / self.std_
+        else :
+            W = (self.quali_sup_val - self.means_) 
+
+        quali_sup_cos2 = ((self.quali_coord_sup_ ** 2) / (np.linalg.norm(W, axis=1).reshape(-1, 1) ** 2))
+        self.quali_sup_cos2 = quali_sup_cos2[:, :self.n_components_]
+
+        #Cos2 var quanti sup
+        if self.std_unit:
+            W = (self.Y - np.mean(self.Y,axis=0).reshape(1,-1)) / np.std(self.Y, axis=0, ddof=0).reshape(1, -1)
+        else :
+            W = (self.Y - np.mean(self.Y,axis=0).reshape(1,-1)) 
+        
+        quanti_sup_cos2 = (self.col_coord_sup_ ** 2) / (np.std(W) ** 2)
+        self.quanti_sup_cos2 = quanti_sup_cos2[:, :self.n_components_]
+
         
         # Correlations between variables and axes
         nvars = self.means_.shape[1]
@@ -750,8 +782,27 @@ class PCA(Base):
         return(df)
 
     def show_row_sup(self):
-        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(self.row_coord_sup_, columns = L, index = self.row_labels_sup_)
+        if self.stats :
+            df = pd.DataFrame()
+            row_name = []
+
+            for i in range(self.row_coord_sup_.shape[1]):
+                comp = 'Comp ' + str(i+1)
+                coord = 'Comp ' + str(i+1) + " (coord)"
+                cos = 'Comp ' + str(i+1) + " (cos2)"
+                #df[comp] = " | " 
+                df[coord] = np.round(self.row_coord_sup_[:,i],3)
+                df[cos] = np.round(self.ind_sup_cos2[:,i],3)
+                #df[comp] = np.round(self.row_coord_[:,i],3)
+                row_name = row_name + ["Comp" + str(i+1) + " coord", "cos2"]
+
+            df.index = self.row_labels_sup_
+            df.columns = row_name
+
+        else :
+            L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+            df=pd.DataFrame(self.row_coord_sup_, columns = L, index = self.row_labels_sup_)
+            
         df = df.style.set_caption("Supplementary individual").set_table_styles([{
             'selector': 'caption',
             'props': [
@@ -798,8 +849,24 @@ class PCA(Base):
     
 
     def show_col_sup(self):
-        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(self.col_coord_sup_, columns = L, index = self.col_labels_sup_)
+        if self.stats :
+            df = pd.DataFrame()
+            row_name = []
+
+            for i in range(self.col_coord_sup_.shape[1]):
+                coord = 'Comp ' + str(i+1) + " (coord)"
+                cos = 'Comp ' + str(i+1) + " (cos2)"
+                df[coord] = np.round(self.col_coord_sup_[:,i],3)
+                df[cos] = np.round(self.quanti_sup_cos2[:,i],3)
+                row_name = row_name + ["Comp" + str(i+1) + " coord", "cos2"]
+
+            df.index = self.col_labels_sup_
+            df.columns = row_name
+
+        else :
+            L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+            df=pd.DataFrame(self.col_coord_sup_, columns = L, index = self.col_labels_sup_)
+        
         df = df.style.set_caption("Supplementary continuous variable").set_table_styles([{
             'selector': 'caption',
             'props': [
@@ -812,8 +879,24 @@ class PCA(Base):
     
 
     def show_qual_sup(self):
-        L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
-        df=pd.DataFrame(self.quali_coord_sup_, columns = L, index = self.quali_sup_labels)
+        if self.stats :
+            df = pd.DataFrame()
+            row_name = []
+
+            for i in range(self.quali_coord_sup_.shape[1]):
+                coord = 'Comp ' + str(i+1) + " (coord)"
+                cos = 'Comp ' + str(i+1) + " (cos2)" 
+                df[coord] = np.round(self.quali_coord_sup_[:,i],3)
+                df[cos] = np.round(self.quali_sup_cos2[:,i],3)
+                row_name = row_name + ["Comp" + str(i+1) + " coord", "cos2"]
+
+            df.index = self.quali_sup_labels
+            df.columns = row_name
+
+        else :
+            L = [ 'Comp ' + str(i+1) for i in range(len(self.eig_[0]))]
+            df=pd.DataFrame(self.quali_coord_sup_, columns = L, index = self.quali_sup_labels)
+            
         df = df.style.set_caption("Supplementary categories").set_table_styles([{
             'selector': 'caption',
             'props': [
