@@ -3,9 +3,6 @@
 """ pca module
 """
 
-# Author: Olivier Garcia <o.garcia.dev@gmail.com>
-# License: BSD 3 clause
-
 import numpy as np
 import scipy.stats as stat
 import pandas as pd

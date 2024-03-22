@@ -3,8 +3,6 @@
 """ base module
 """
 
-# Author: Olivier Garcia <o.garcia.dev@gmail.com>
-# License: BSD 3 clause
 
 import numpy as np
 import pandas as pd
