@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import seaborn as sns
 
-from fanalysis.basebis import Base
+from ACP.base import Base
 from IPython.display import display
 
 
